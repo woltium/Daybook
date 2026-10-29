@@ -1,7 +1,7 @@
 // 每日笔记：一个文件夹里每天一个 MMDD.md，按「## 标题」分节。
 // 文件夹可以是「文档」下自动新建的本地文件夹，也可以是 Obsidian 库里的某个文件夹。
 // 模块只读写自己那一节（待办 / 工作总结），文件里的其它内容原样保留。
-import { existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Notes } from '../core/module.ts';
@@ -34,8 +34,15 @@ function documentsDir() {
   return join(home, 'Documents');
 }
 
-/** 本地模式用的文件夹：文档/信息中心 */
-export const localNotesDir = () => join(documentsDir(), '信息中心');
+/** 本地模式用的文件夹：文档/Daybook */
+export const localNotesDir = () => join(documentsDir(), 'Daybook');
+
+/** 以前的本地文件夹叫「文档/信息中心」，新文件夹还没有时改个名 */
+function migrateLocalDir() {
+  const dir = localNotesDir();
+  const old = join(documentsDir(), '信息中心');
+  if (!existsSync(dir) && existsSync(old)) renameSync(old, dir);
+}
 
 /** 以前只存了 dir 的配置算 Obsidian 模式，什么都没设就用本地文件夹 */
 export function notesConfig(): NotesConfig {
@@ -163,7 +170,10 @@ function restartWatch() {
   const dir = notesDir();
   if (!dir || !onExternalChange) return;
   // 本地文件夹由我们管，先建好，这样用户在文件夹里手动改的文件也能刷新到界面
-  if (notesConfig().mode === 'local' && !process.env.HUB_NOTES_DIR) mkdirSync(dir, { recursive: true });
+  if (notesConfig().mode === 'local' && !process.env.HUB_NOTES_DIR) {
+    migrateLocalDir();
+    mkdirSync(dir, { recursive: true });
+  }
   if (!existsSync(dir)) return;
   try {
     watcher = watch(dir, () => {

@@ -1,4 +1,4 @@
-// 根据某天在 Claude Code 里的对话（加上信息中心里和 agent 的对话、完成的待办）起草工作总结。
+// 根据某天在 Claude Code 里的对话（加上 Daybook 里和 agent 的对话、完成的待办）起草工作总结。
 // 一天可能聊很多，所以分两步：长会话先各自压成一两句，再整体概括。
 // 只返回草稿，写不写进笔记由用户在界面上决定。
 // 也能从对话里找出没收尾的事，生成「新增待办」提案，批准后才写进笔记。
@@ -61,7 +61,7 @@ async function mapLimit<T, R>(xs: T[], limit: number, fn: (x: T) => Promise<R>) 
   return out;
 }
 
-/** 一天的材料：各会话摘录（长的先压缩）、信息中心里的对话、待办 */
+/** 一天的材料：各会话摘录（长的先压缩）、Daybook 里的对话、待办 */
 /** 进度说明，界面上实时显示（见 server/jobs.ts） */
 export type Progress = (text: string) => void;
 
@@ -73,7 +73,7 @@ async function gather(date: string, progress: Progress) {
   const sessions = await claudeSessionsOn(date);
   const hubTurns = chatLog(date);
   const todos = (await runAction('todo', 'list', { date })) as { id: string; title: string; done: boolean; details: string[] }[];
-  if (!sessions.length && !hubTurns.length) throw new NothingToSummarize('这一天在 Claude 和信息中心里都没有对话记录');
+  if (!sessions.length && !hubTurns.length) throw new NothingToSummarize('这一天在 Claude 和 Daybook 里都没有对话记录');
 
   const long = sessions.filter((s) => transcript(s).length > SESSION_LIMIT).length;
   let compressed = 0;
@@ -96,7 +96,7 @@ async function gather(date: string, progress: Progress) {
         ])
       : ['（没有）']),
     '',
-    '# 信息中心里和 agent 的对话',
+    '# Daybook 里和 agent 的对话',
     ...(hubTurns.length ? hubTurns.map((t) => `[${time(t.at)}] 用户：${t.user}\n  助手：${t.reply.slice(0, 300)}`) : ['（没有）']),
   ].join('\n');
   return {

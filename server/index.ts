@@ -2,4 +2,4 @@
 import { startServer } from './app.ts';
 
 const { port } = await startServer(Number(process.env.HUB_API_PORT ?? 5179));
-console.log(`信息中心后端：http://127.0.0.1:${port}  ·  工具列表：/api/tools`);
+console.log(`Daybook 后端：http://127.0.0.1:${port}  ·  工具列表：/api/tools`);

@@ -41,7 +41,7 @@ function App() {
     <DateProvider>
       <div className="shell">
         <nav className="sidebar">
-          <div className="sidebar__brand">信息中心</div>
+          <div className="sidebar__brand">Daybook</div>
           <button type="button" className="nav-item" aria-current={route === 'today' ? 'page' : undefined} onClick={() => go('today')}>
             <CalendarDays size={16} />
             <span className="nav-item__label">今天</span>

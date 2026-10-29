@@ -1,12 +1,19 @@
 // Electron 主进程：在本进程里启动后端，打开主窗口。
 // 由 scripts/build-electron.mjs 打包成 dist-electron/main.mjs。
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } from 'electron';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const devUrl = process.env.HUB_DEV_URL;
+
+// 以前叫 InfoHub（打包）/ info-hub（开发），新目录还没有时把旧的整个挪过来
+const userData = app.getPath('userData');
+if (!existsSync(userData)) {
+  const old = ['InfoHub', 'info-hub'].map((n) => join(app.getPath('appData'), n)).find(existsSync);
+  if (old) renameSync(old, userData);
+}
 
 // 必须在加载后端之前确定数据目录
 process.env.HUB_DATA_DIR ??= app.isPackaged ? join(app.getPath('userData'), 'data') : join(root, 'data');
@@ -65,7 +72,7 @@ function openMain() {
   }
   const bounds = loadBounds();
   const win = new BrowserWindow({
-    title: '信息中心',
+    title: 'Daybook',
     ...bounds,
     minWidth: 720,
     minHeight: 480,
