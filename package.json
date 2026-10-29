@@ -1,0 +1,64 @@
+{
+  "name": "info-hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build && node scripts/build-electron.mjs",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --linux AppImage deb",
+    "server": "node --disable-warning=ExperimentalWarning server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/ensure-electron.mjs"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "lucide-react": "^1.63.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^40.10.2",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  },
+  "allowScripts": {
+    "electron@40.10.2": true,
+    "esbuild@0.28.2": true
+  },
+  "description": "本地信息中心：每日待办、工作总结、待看",
+  "main": "dist-electron/main.mjs",
+  "build": {
+    "appId": "local.info-hub",
+    "productName": "InfoHub",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "executableName": "info-hub",
+      "desktop": {
+        "entry": {
+          "Name": "信息中心"
+        }
+      }
+    }
+  }
+}
