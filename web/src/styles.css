@@ -328,3 +328,7 @@ button.chip:hover { border-color: var(--border-strong); }
 .working .muted { color: inherit; opacity: 0.7; }
 .spin { animation: spin 0.9s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* KaTeX 块级公式：单独一行，太宽时横向滚动 */
+.math-block { display: block; overflow-x: auto; overflow-y: hidden; white-space: normal; }
+.math-block .katex-display { margin: 0.4em 0; }

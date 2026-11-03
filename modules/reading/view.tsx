@@ -1,10 +1,11 @@
 import { BookOpen, Check, FileText, Pencil, Lightbulb, MessageSquareText, Search, Trash2, X, type LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { Item } from '../../core/module.ts';
 import { call, useQuery } from '../../web/src/core/client.ts';
 import { desktop } from '../../web/src/core/desktop.ts';
 import { AutoSaveText, Button, Chip, Empty, IconButton, QuickAdd, Segmented, PageFrame, type Tone } from '../../web/src/ui/kit.tsx';
 import type { ModuleView } from '../../web/src/views.ts';
+import { MathText, withMath } from '../../web/src/ui/MathText.tsx';
 import { parseArxivId } from './arxiv.ts';
 import type { Kind, Reading, Status } from './module.ts';
 
@@ -62,7 +63,7 @@ function KindLabel({ kind }: { kind: Kind }) {
 const displayTitle = (t: string) => t.replace(/^(知识点|论文|推文)[：:]\s*/, '');
 
 function Title({ r }: { r: Item<Reading> }) {
-  const title = displayTitle(r.data.title);
+  const title = <MathText text={displayTitle(r.data.title)} />;
   return (
     <h3 className="reading-title">
       {r.data.url ? (
@@ -76,12 +77,12 @@ function Title({ r }: { r: Item<Reading> }) {
   );
 }
 
-/** 【重点】→ 高亮 */
+/** 【重点】→ 高亮；$…$ 等 LaTeX 公式交给 KaTeX */
 function Inline({ text }: { text: string }) {
   return (
     <>
       {text.split(/(【[^】]+】)/).map((part, i) =>
-        /^【.+】$/.test(part) ? <mark key={i}>{part.slice(1, -1)}</mark> : part,
+        /^【.+】$/.test(part) ? <mark key={i}>{withMath(part.slice(1, -1))}</mark> : <Fragment key={i}>{withMath(part)}</Fragment>,
       )}
     </>
   );
@@ -90,7 +91,9 @@ function Inline({ text }: { text: string }) {
 /** 笔记阅读视图：• / - / 1) 开头的行成列表；行首「要点：」这类短标签加粗；长段按句号拆开 */
 function NoteBody({ text }: { text: string }) {
   const blocks: ({ list: string[] } | { para: string })[] = [];
-  for (const raw of text.split('\n')) {
+  // 跨行的块级公式先并成一行，免得被按行拆开
+  const joined = text.replace(/\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]/g, (m) => m.replace(/\s*\n\s*/g, ' '));
+  for (const raw of joined.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     const bullet = line.match(/^(?:[•\-*·]|\d+[)）.、])\s*(.*)$/);
@@ -156,7 +159,7 @@ function ReadingCard({ r }: { r: Item<Reading> }) {
       </div>
       {r.data.abstract && (
         <p className={`reading-abstract ${absOpen ? '' : 'reading-abstract--clamp'}`} onClick={() => setAbsOpen(!absOpen)} title={absOpen ? '收起摘要' : '展开摘要'}>
-          {r.data.abstract}
+          <MathText text={r.data.abstract} />
         </p>
       )}
       {editing ? (
@@ -245,7 +248,7 @@ function ArxivSearch({ onClose }: { onClose: () => void }) {
               <li key={p.arxivId} className="list-row list-row--top">
                 <div className="list-row__main">
                   <a className="reading-title" onClick={() => void desktop.openExternal(p.url)}>
-                    {p.title}
+                    <MathText text={p.title} />
                   </a>
                   <div className="muted">
                     {p.arxivId} · {p.published} · {p.authors.slice(0, 3).join(', ')}

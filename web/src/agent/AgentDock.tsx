@@ -2,10 +2,11 @@
 // 切到别的页面再回来，这一页的对话还在。
 // agent 只能调用模块开放的工具，写操作会变成提案，直接在对话里批准或拒绝。
 import { ChevronDown, ChevronUp, Eraser, Send } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { api, onEvent } from '../core/client.ts';
 import type { Proposal } from '../today/Timeline.tsx';
 import { Button, IconButton } from '../ui/kit.tsx';
+import { withMath } from '../ui/MathText.tsx';
 
 interface Step {
   tool: string;
@@ -44,9 +45,9 @@ const STATUS: Record<Proposal['status'], string> = { pending: '待批准', appli
 const STORAGE = 'hub.agent.v2';
 type Convo = { id?: string; log: Msg[] };
 
-/** 模型回复里最常见的 **加粗**，其它 Markdown 保持原样显示 */
+/** 模型回复里最常见的 **加粗** 和 LaTeX 公式，其它 Markdown 保持原样显示 */
 const withBold = (text: string) =>
-  text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <strong key={i}>{part}</strong> : part));
+  text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <strong key={i}>{withMath(part)}</strong> : <Fragment key={i}>{withMath(part)}</Fragment>));
 
 function loadSaved(): Record<string, Convo> {
   try {
