@@ -242,6 +242,10 @@ button.chip:hover { border-color: var(--border-strong); }
 .todo-title > :first-child { flex: 1; min-width: 0; }
 .todo-title .chip { flex: none; }
 .todo--doing { box-shadow: inset 3px 0 0 var(--warn); padding-left: 10px; }
+.todo-archived { display: flex; flex-direction: column; gap: 4px; }
+.todo-archived__head { align-self: flex-start; display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px 2px; font-size: 13px; color: var(--text-3); cursor: pointer; }
+.todo-archived__head:hover { color: var(--text-2); }
+.todo-archived .list-row__main { color: var(--text-3); }
 .prio { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
 .prio--high { background: var(--danger); }
 .prio--mid { background: var(--warn); opacity: 0.55; }

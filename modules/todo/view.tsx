@@ -1,10 +1,10 @@
-import { AlarmClock, ChevronDown, ChevronRight, FolderInput, ListTodo, Pause, Play, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState, type CSSProperties } from 'react';
-import { api, call, useQuery } from '../../web/src/core/client.ts';
+import { AlarmClock, Archive, ArchiveRestore, ChevronDown, ChevronRight, FolderInput, ListTodo, Pause, Play, Plus, Trash2 } from 'lucide-react';
+import { useState, type CSSProperties } from 'react';
+import { call, useQuery } from '../../web/src/core/client.ts';
 import { today, useDate } from '../../web/src/core/date.tsx';
 import { beijingAt } from '../../core/time.ts';
 import { cityTimes, useWorldClock } from '../../web/src/core/worldclock.ts';
-import { Check, Chip, DateNav, Empty, IconButton, InlineEdit, PageFrame, Progress, QuickAdd, WorldClock } from '../../web/src/ui/kit.tsx';
+import { Check, Chip, DateNav, Empty, IconButton, InlineEdit, PageFrame, Progress, QuickAdd } from '../../web/src/ui/kit.tsx';
 import type { ModuleView } from '../../web/src/views.ts';
 import type { Todo } from './module.ts';
 
@@ -77,6 +77,7 @@ function TodoRow({ t }: { t: Todo }) {
         <div className="todo-title">
           <InlineEdit value={t.title} onSave={(title) => call('todo', 'update', { id: t.id, title })} />
           {t.doing && <Chip tone="warn">处理中</Chip>}
+          {t.archived && t.category && <Chip>{t.category}</Chip>}
           {editingTime ? (
             <TimeInput t={t} onClose={() => setEditingTime(false)} />
           ) : (
@@ -91,8 +92,8 @@ function TodoRow({ t }: { t: Todo }) {
         </div>
       </div>
       <div className="row-actions">
-        {!t.time && !t.done && !editingTime && <IconButton icon={AlarmClock} label="设置提醒时间" size="sm" ghost onClick={() => setEditingTime(true)} />}
-        {!t.done && (
+        {!t.time && !t.done && !t.archived && !editingTime && <IconButton icon={AlarmClock} label="设置提醒时间" size="sm" ghost onClick={() => setEditingTime(true)} />}
+        {!t.done && !t.archived && (
           <IconButton
             icon={t.doing ? Pause : Play}
             label={t.doing ? '暂停处理' : '开始处理'}
@@ -101,7 +102,16 @@ function TodoRow({ t }: { t: Todo }) {
             onClick={() => call('todo', 'setDoing', { id: t.id, doing: !t.doing })}
           />
         )}
-        {!editingCategory && <IconButton icon={FolderInput} label="换分类" size="sm" ghost onClick={() => setEditingCategory(true)} />}
+        {!t.done && (
+          <IconButton
+            icon={t.archived ? ArchiveRestore : Archive}
+            label={t.archived ? '恢复' : '暂时归档'}
+            size="sm"
+            ghost
+            onClick={() => call('todo', 'setArchived', { id: t.id, archived: !t.archived })}
+          />
+        )}
+        {!t.archived && !editingCategory && <IconButton icon={FolderInput} label="换分类" size="sm" ghost onClick={() => setEditingCategory(true)} />}
         <IconButton icon={Trash2} label="删除" size="sm" ghost onClick={() => call('todo', 'remove', { id: t.id })} />
       </div>
     </li>
@@ -166,27 +176,42 @@ function Group({ name, todos, date }: { name: string; todos: Todo[]; date: strin
   );
 }
 
-/** 当前日期对应的笔记文件，比如 07每日待办/1028.md */
-function useNoteFile(date: string) {
-  const [dir, setDir] = useState('');
-  useEffect(() => void api.get<{ dir: string }>('/api/notes/config').then((c) => setDir(c.dir)), []);
-  if (!dir) return '';
-  return `${dir.split('/').filter(Boolean).pop()}/${date.slice(5, 7)}${date.slice(8, 10)}.md`;
+/** 归档的待办收在最下面，默认收起 */
+function Archived({ todos }: { todos: Todo[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="todo-archived">
+      <button className="todo-archived__head" onClick={() => setOpen(!open)}>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <Archive size={14} />
+        已归档 {todos.length}
+      </button>
+      {open && (
+        <ul className="list">
+          {todos.map((t) => (
+            <TodoRow key={t.id} t={t} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 function Page() {
   const { date } = useDate();
-  const { data, error } = useQuery('todo', 'list', { date });
-  const file = useNoteFile(date);
+  const { data: all, error } = useQuery('todo', 'list', { date });
+  const data = all?.filter((t) => !t.archived);
+  const archived = all?.filter((t) => t.archived) ?? [];
   const done = data?.filter((t) => t.done).length ?? 0;
   const doing = data?.filter((t) => t.doing).length ?? 0;
   const [time, setTime] = useState('');
   const [category, setCategory] = useState('');
   const loose = data?.filter((t) => !t.category) ?? [];
   const groups = [...new Set(data?.flatMap((t) => (t.category ? [t.category] : [])))];
+  const categories = [...new Set(all?.flatMap((t) => (t.category ? [t.category] : [])))];
 
   return (
-    <PageFrame title="每日待办" sub={file} tools={<><WorldClock /><DateNav /></>}>
+    <PageFrame title="每日待办" tools={<DateNav />}>
       <QuickAdd
         placeholder="添加待办，回车保存"
         before={<input className="category-input category-input--add" aria-label="分类" title="分类（一件大事的名字），可不填" list="todo-categories" placeholder="分类" value={category} onChange={(e) => setCategory(e.target.value)} />}
@@ -210,7 +235,7 @@ function Page() {
         </div>
       )}
       <datalist id="todo-categories">
-        {groups.map((g) => (
+        {categories.map((g) => (
           <option key={g} value={g} />
         ))}
       </datalist>
@@ -230,16 +255,17 @@ function Page() {
             ))}
           </div>
         ) : (
-          <Empty>这一天没有待办</Empty>
+          <Empty>{archived.length ? '这一天的待办都归档了' : '这一天没有待办'}</Empty>
         ))}
+      {archived.length > 0 && <Archived todos={archived} />}
     </PageFrame>
   );
 }
 
-/** 侧栏数字：今天还没完成的待办 */
+/** 侧栏数字：今天还没完成、也没归档的待办 */
 function Badge() {
   const { data } = useQuery('todo', 'list', { date: today() });
-  return data ? <>{data.filter((t) => !t.done).length}</> : null;
+  return data ? <>{data.filter((t) => !t.done && !t.archived).length}</> : null;
 }
 
 export const todoView: ModuleView = { icon: ListTodo, Page, Badge };

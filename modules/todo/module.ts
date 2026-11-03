@@ -10,12 +10,14 @@ import { beijingAt } from '../../core/time.ts';
 //   - [/] 二号机、三号机切到统一分支
 //   - [ ] 推送到远端 ⏰14:30
 //   - [x] 做完的
+//   - [>] 暂时归档的
 // 这一节里其它的行原样保留，没有待办的分类标题会被去掉。时间是这条待办那一天的北京时间，没做完抄到第二天时不带时间。
 // 以前的格式是在待办下面缩进挂细项，读到时会改成：这条待办变成分类，细项变成分类下的待办。
+// 暂时归档的待办平时不显示、不算进进度，没做完也照样抄到第二天，恢复后回到未开始。
 // 时间线只记「完成待办」和「开始处理」，新增、改名、移动、删除这些过程性的操作不记。
 
 const SECTION = '待办';
-const CHECKBOX = /^[-*] \[( |x|X|\/)\] (.*)$/;
+const CHECKBOX = /^[-*] \[( |x|X|\/|>)\] (.*)$/;
 const GROUP = /^###\s+(.+?)\s*$/;
 const INDENTED = /^\s+\S/;
 const TIME = /\s*⏰\s*(([01]\d|2[0-3]):[0-5]\d)\s*$/;
@@ -31,6 +33,8 @@ export interface Todo {
   done: boolean;
   /** 正在处理中，笔记里写成 `- [/]` */
   doing: boolean;
+  /** 暂时归档，笔记里写成 `- [>]` */
+  archived: boolean;
   /** 所在的分类（「### 」标题），没有分类为 null */
   category: string | null;
   /** 提醒时间 HH:MM（北京时间），笔记里写在标题后面：⏰14:30 */
@@ -73,7 +77,7 @@ function parse(day: string, content: string | null): Doc {
     let end = line + 1;
     while (end < lines.length && INDENTED.test(lines[end])) end++;
     const legacy = lines.slice(line + 1, end).map(detailText);
-    items.push({ id: `${day}:${hash(title)}${n ? `-${n}` : ''}`, date: day, title, done: m[1] === 'x' || m[1] === 'X', doing: m[1] === '/', category: group, time, line, end, legacy });
+    items.push({ id: `${day}:${hash(title)}${n ? `-${n}` : ''}`, date: day, title, done: m[1] === 'x' || m[1] === 'X', doing: m[1] === '/', archived: m[1] === '>', category: group, time, line, end, legacy });
   });
   return { day, lines, items, groups };
 }
@@ -100,11 +104,11 @@ function tidy(lines: string[]) {
 
 const read = (ctx: C, day: string) => parse(day, ctx.notes.read(day, SECTION));
 const save = (ctx: C, doc: Doc) => ctx.notes.write(doc.day, SECTION, tidy(doc.lines).join('\n'), 'start');
-type State = Pick<Todo, 'done' | 'doing'> & { time?: string | null };
+type State = Pick<Todo, 'done' | 'doing'> & { archived?: boolean; time?: string | null };
 const OPEN: State = { done: false, doing: false };
-const mark = ({ done, doing }: State) => (done ? 'x' : doing ? '/' : ' ');
+const mark = ({ done, doing, archived }: State) => (done ? 'x' : archived ? '>' : doing ? '/' : ' ');
 const line = (title: string, s: State) => `- [${mark(s)}] ${title}${s.time ? ` ⏰${s.time}` : ''}`;
-const setMark = (text: string, s: State) => text.replace(/\[( |x|X|\/)\]/, `[${mark(s)}]`);
+const setMark = (text: string, s: State) => text.replace(/\[( |x|X|\/|>)\]/, `[${mark(s)}]`);
 
 /** 把几行待办插到分类的最后（没有这个分类就在最后新建），返回插入后的文档 */
 function insert(doc: Doc, group: string | null, block: string[]): Doc {
@@ -142,7 +146,7 @@ const titleOf = (ctx: C, id: string) => {
 
 /** 旧格式的细项变成待办：细项自己写了复选框就照着来，否则跟着原来那条待办是否做完 */
 const legacyLine = (d: string, parent: Parsed) => {
-  const m = /^\[( |x|X|\/)\]\s+(.*)$/.exec(d);
+  const m = /^\[( |x|X|\/|>)\]\s+(.*)$/.exec(d);
   return m ? `- [${m[1]}] ${m[2]}` : line(d.replace(/\n/g, ' '), { done: parent.done, doing: false });
 };
 
@@ -179,8 +183,8 @@ function setReminder(ctx: C, day: string, todoId: string, time: string, snoozeUn
   if (existing) ctx.store.update(existing.id, { snoozeUntil });
   else ctx.store.insert({ todoId, time, snoozeUntil }, day);
 }
-/** 分类按笔记里的顺序（没分类的在最前），每个分类里正在处理的在最前，做完的在最后 */
-const rank = (t: Todo) => (t.doing ? 0 : t.done ? 2 : 1);
+/** 分类按笔记里的顺序（没分类的在最前），每个分类里正在处理的在最前，做完的、归档的在最后 */
+const rank = (t: Todo) => (t.doing ? 0 : t.archived ? 3 : t.done ? 2 : 1);
 const sortTodos = <T extends Todo>(xs: T[]) => {
   const groups = [...new Set([null, ...xs.map((t) => t.category)])];
   return [...xs].sort((a, b) => groups.indexOf(a.category) - groups.indexOf(b.category) || rank(a) - rank(b));
@@ -202,6 +206,7 @@ export const todo = defineModule({
     '新加的待办属于已有的分类时，用同一个分类名，不要另起一个意思相近的分类。',
     '用户一口气说了一堆事时，先按目标归成少数几个分类再提议。',
     '用户开始做某件事时可以用 setDoing 标成正在处理；完成时用 setDone。',
+    '用户说某件事先放一放、以后再说时，用 setArchived 暂时归档；归档的待办不显示在列表里，想做时再恢复。',
     '没做完的待办第二天会自动带过去（连同分类），不需要手动移到明天。',
     '用户说了具体时间的待办，用 time 或 setTime 设上（北京时间 HH:MM），到点会弹窗提醒。',
     '改动前先用 todo.list 拿到准确的 id 和已有的分类。',
@@ -209,7 +214,7 @@ export const todo = defineModule({
   schema,
 }).actions((a) => ({
   list: a.query({
-    description: '列出某天的待办，按分类排好。返回 id、标题、是否完成、是否正在处理、分类、提醒时间。',
+    description: '列出某天的待办，按分类排好。返回 id、标题、是否完成、是否正在处理、是否已归档、分类、提醒时间。',
     input: z.object({ date: date.optional().describe('YYYY-MM-DD，默认今天') }),
     run: ({ date }, ctx) => {
       const day = date ?? ctx.today;
@@ -235,7 +240,7 @@ export const todo = defineModule({
       const states = ctx.store.list({ date: ctx.today });
       return read(ctx, ctx.today)
         .items.filter((t) => {
-          if (t.done || !t.time || beijingAt(ctx.today, t.time) > now) return false;
+          if (t.done || t.archived || !t.time || beijingAt(ctx.today, t.time) > now) return false;
           const s = states.find((r) => r.data.todoId === t.id && r.data.time === t.time);
           return !s || (s.data.snoozeUntil !== null && Date.parse(s.data.snoozeUntil) <= now);
         })
@@ -369,6 +374,18 @@ export const todo = defineModule({
     },
   }),
 
+  setArchived: a.mutation({
+    description: '暂时归档待办（先放一放，不显示在列表里），或从归档恢复（回到未开始）',
+    activity: () => null,
+    input: z.object({ id: z.string(), archived: z.boolean() }),
+    describe: ({ id, archived }, ctx) => `${archived ? '归档' : '恢复'}待办「${titleOf(ctx, id)}」`,
+    run: ({ id, archived }, ctx) => {
+      const { doc, item } = find(ctx, id);
+      doc.lines[item.line] = setMark(doc.lines[item.line], { done: false, doing: false, archived });
+      save(ctx, doc);
+    },
+  }),
+
   move: a.mutation({
     description: '把待办移到另一天（从原来那天的文件里删掉，加到目标日期的文件里，分类不变）',
     activity: () => null,
@@ -377,7 +394,7 @@ export const todo = defineModule({
     run: ({ id, date }, ctx) => {
       const { day, doc, item } = find(ctx, id);
       if (day === date) return;
-      save(ctx, insert(read(ctx, date), item.category, [line(item.title, { done: false, doing: item.doing, time: item.time }), ...doc.lines.slice(item.line + 1, item.end)]));
+      save(ctx, insert(read(ctx, date), item.category, [line(item.title, { ...item, done: false }), ...doc.lines.slice(item.line + 1, item.end)]));
       save(ctx, cut(doc, item));
     },
   }),
@@ -397,7 +414,7 @@ export const todo = defineModule({
     description: '生成某天待办的 Markdown 段落（用于日报）',
     input: z.object({ date: date.optional() }),
     run: ({ date }, ctx) => {
-      const xs = sortTodos(read(ctx, date ?? ctx.today).items);
+      const xs = sortTodos(read(ctx, date ?? ctx.today).items.filter((t) => !t.archived));
       return xs.length ? ['## 待办', ...markdown(xs)].join('\n') : '';
     },
   }),
