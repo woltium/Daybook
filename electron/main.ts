@@ -25,6 +25,7 @@ if (!app.requestSingleInstanceLock()) {
 
 const { startServer } = await import('../server/app.ts');
 const { filesDir } = await import('../server/db.ts');
+const { events, runAction } = await import('../server/runtime.ts');
 // ───────── 窗口位置记忆 ─────────
 
 interface Bounds {
@@ -86,7 +87,10 @@ function openMain() {
   if (bounds.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.on('close', () => saveBounds(win));
-  win.on('closed', () => (mainWindow = null));
+  win.on('closed', () => {
+    mainWindow = null;
+    reminderWindow?.close();
+  });
 
   // 外部链接交给系统浏览器
   const external = (url: string) => {
@@ -108,6 +112,49 @@ function openMain() {
   win.on('maximize', sendMaximized);
   win.on('unmaximize', sendMaximized);
   mainWindow = win;
+}
+
+// ───────── 待办提醒弹窗 ─────────
+// 时刻由 todo.due 判断（北京时间 + 系统时钟）。弹窗置顶但不抢焦点，免得打断正在打的字；
+// 里面的按钮改了提醒状态后会触发 change，这里再查一次，没有到点的就关掉弹窗。
+
+const REMINDER_WIDTH = 380;
+let reminderWindow: BrowserWindow | null = null;
+
+async function checkReminders() {
+  // 笔记文件夹还没设置时查不了，当作没有提醒
+  const due = (await runAction('todo', 'due', {}).catch(() => [])) as unknown[];
+  if (!due.length) return reminderWindow?.close();
+  const height = Math.min(480, 56 + due.length * 92);
+  if (reminderWindow) return reminderWindow.setSize(REMINDER_WIDTH, height);
+  const { workArea: area } = screen.getPrimaryDisplay();
+  const win = new BrowserWindow({
+    title: '待办提醒',
+    width: REMINDER_WIDTH,
+    height,
+    x: area.x + area.width - REMINDER_WIDTH - 16,
+    y: area.y + 16,
+    show: false,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
+    webPreferences: { preload: join(root, 'dist-electron', 'preload.cjs'), contextIsolation: true, sandbox: true },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setVisibleOnAllWorkspaces(true);
+  win.once('ready-to-show', () => win.showInactive());
+  win.on('closed', () => (reminderWindow = null));
+  void win.loadURL(`${base}/#/reminder`);
+  reminderWindow = win;
+}
+
+function watchReminders() {
+  void checkReminders();
+  setInterval(() => void checkReminders(), 15_000);
+  events.on('change', ({ module }: { module: string }) => {
+    if (module === 'todo') void checkReminders();
+  });
 }
 
 // ───────── 给渲染进程的接口（见 preload.ts） ─────────
@@ -150,6 +197,7 @@ async function start() {
   base = devUrl ?? `http://127.0.0.1:${server.port}`;
   console.log(`后端 http://127.0.0.1:${server.port}  ·  界面 ${base}`);
   openMain();
+  watchReminders();
 }
 
 app.whenReady().then(start, (err) => {

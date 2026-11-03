@@ -72,7 +72,7 @@ async function gather(date: string, progress: Progress) {
   progress('读取当天的 Claude 会话…');
   const sessions = await claudeSessionsOn(date);
   const hubTurns = chatLog(date);
-  const todos = (await runAction('todo', 'list', { date })) as { id: string; title: string; done: boolean; details: string[] }[];
+  const todos = (await runAction('todo', 'list', { date })) as { id: string; title: string; done: boolean; category: string | null }[];
   if (!sessions.length && !hubTurns.length) throw new NothingToSummarize('这一天在 Claude 和 Daybook 里都没有对话记录');
 
   const long = sessions.filter((s) => transcript(s).length > SESSION_LIMIT).length;
@@ -149,39 +149,37 @@ export async function draftSummary(date: string, progress: Progress = () => {}) 
 
 // ───────── 没收尾的事 → 待办提案 ─────────
 
-const TODO_PROMPT = `下面是用户某一天和 AI 助手的各个会话摘录或摘要，以及已有的待办（T1、T2… 是没做完的，带编号）。
+const TODO_PROMPT = `下面是用户某一天和 AI 助手的各个会话摘录或摘要，以及已有的待办（按分类列出）。
 请整理出需要后续跟进的事，要求：
-- 待办要整体：一件事一个待办，按项目或目标命名，比如「统一三台机器的分支」，不要把一个目标拆成很多条
-- 零碎的验证、确认、推送、截图这类小事不要单独成为待办，放进对应待办的 details 里（每条不超过 20 个字）
-- 如果属于某个已有的没做完的待办，就挂到它下面（用它的编号），不要新建
-- 只挑材料里明确还没收尾的事，不要编造；试用性质、和工作无关的小事直接略过
-- 新建的待办最多 4 条，标题动词开头，不超过 20 个字
-- 只输出 JSON 数组，不要别的文字。每一项是下面两种之一：
-  {"todo": "新待办标题", "details": ["细项", ...]}
-  {"attach": "T1", "details": ["要补充到 T1 下面的细项", ...]}
+- 一件大事是一个分类，按项目或目标命名，比如「统一三台机器的分支」；里面每一步是一条待办，比如「推送到远端」
+- 属于已有分类的，category 用一模一样的分类名，不要另起意思相近的分类
+- 零散的小事可以不分类（不写 category）
+- 只挑材料里明确还没收尾的事，不要编造；已有的待办不要重复；试用性质、和工作无关的小事直接略过
+- 新建的待办最多 8 条，标题动词开头，不超过 20 个字
+- 只输出 JSON 数组，不要别的文字。每一项是：{"todo": "待办标题", "category": "分类名"}
 - 没有需要跟进的就输出 []`;
 
 const normalize = (s: string) => s.replace(/[\s，。、,.!！?？「」“”"']/g, '').toLowerCase();
 
-type Suggestion = { todo?: string; attach?: string; details?: string[] };
+type Suggestion = { todo?: string; category?: string };
 
 /**
- * 让模型从对话里整理出没收尾的事：要么新建一个整体的待办（细项挂在下面），
- * 要么把细项补到已有待办下面。每一项都是一个提案，在时间线里批准后才写进笔记。
+ * 让模型从对话里整理出没收尾的事，按分类（一件大事）归好。
+ * 每一条都是一个提案，在时间线里批准后才写进笔记。
  */
 export async function proposeTodos(date: string, progress: Progress = () => {}) {
   const g = await gather(date, progress);
   const open = g.todos.filter((t) => !t.done);
-  const pending = listProposals('pending').filter((p) => p.module === 'todo' && (p.action === 'add' || p.action === 'addDetails'));
-  const pendingTitles = pending.filter((p) => p.action === 'add').map((p) => (p.input as { title: string }).title);
-  const pendingDetails = new Set(pending.flatMap((p) => (p.input as { details?: string[] }).details ?? []).map(normalize));
+  const pending = listProposals('pending').filter((p) => p.module === 'todo' && p.action === 'add');
+  const pendingTitles = pending.map((p) => (p.input as { title: string }).title);
 
+  const groups = [...new Set(open.map((t) => t.category))];
   const material = [
     g.conversations,
     '',
     '# 已有的待办',
-    ...open.map((t, i) => [`T${i + 1}: ${t.title}`, ...t.details.map((d) => `    - ${d}`)].join('\n')),
-    ...g.todos.filter((t) => t.done).map((t) => `已完成: ${t.title}`),
+    ...groups.flatMap((c) => [c ? `分类「${c}」：` : '不分类：', ...open.filter((t) => t.category === c).map((t) => `  - ${t.title}`)]),
+    ...g.todos.filter((t) => t.done).map((t) => `已完成: ${t.category ? `${t.category}：` : ''}${t.title}`),
     ...pending.map((p) => `待批准: ${p.summary}`),
     ...(g.todos.length || pending.length ? [] : ['（没有）']),
   ].join('\n');
@@ -203,25 +201,18 @@ export async function proposeTodos(date: string, progress: Progress = () => {}) 
     throw new Error('模型返回的格式不对，请重试');
   }
 
-  // 已有待办、待批准的提案里已经有的都跳过
+  // 已有待办、待批准的提案里已经有的都跳过；分类名和已有的只差标点空格时用已有的写法
   const seenTitles = new Set([...g.todos.map((t) => t.title), ...pendingTitles].map(normalize));
-  const fresh = (details: string[] | undefined, existing: string[] = []) => {
-    const known = new Set([...existing.map(normalize), ...pendingDetails]);
-    return (details ?? []).map((d) => String(d).trim()).filter((d) => d && !known.has(normalize(d)));
-  };
-
+  const known = new Map(g.todos.flatMap((t) => (t.category ? [[normalize(t.category), t.category] as const] : [])));
   const created = [];
-  let newTodos = 0;
   for (const s of suggestions) {
-    if (s.attach) {
-      const target = open[Number(s.attach.replace(/\D/g, '')) - 1];
-      const details = target ? fresh(s.details, target.details) : [];
-      if (target && details.length) created.push(createProposal('todo', 'addDetails', { id: target.id, details }));
-    } else if (s.todo && newTodos < 4 && !seenTitles.has(normalize(s.todo))) {
-      seenTitles.add(normalize(s.todo));
-      newTodos++;
-      created.push(createProposal('todo', 'add', { title: s.todo.trim(), details: fresh(s.details), date }));
-    }
+    if (created.length >= 8) break;
+    const title = typeof s.todo === 'string' ? s.todo.trim() : '';
+    if (!title || seenTitles.has(normalize(title))) continue;
+    seenTitles.add(normalize(title));
+    const raw = typeof s.category === 'string' ? s.category.trim() : '';
+    const category = raw ? (known.get(normalize(raw)) ?? raw) : undefined;
+    created.push(createProposal('todo', 'add', { title, category, date }));
   }
   return { suggested: suggestions.length, created: created.length };
 }

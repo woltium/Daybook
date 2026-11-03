@@ -22,3 +22,12 @@ export const beijingHour = (d: Date | string | number = new Date()) => shift(d).
 
 /** 某个北京日期 0 点对应的时间戳 */
 export const beijingMidnight = (iso: string) => new Date(`${iso}T00:00:00+08:00`).getTime();
+
+/** 某个北京日期的 HH:MM 对应的时间戳 */
+export const beijingAt = (iso: string, hm: string) => new Date(`${iso}T${hm}:00+08:00`).getTime();
+
+/** 北京日期前后平移若干天，返回 YYYY-MM-DD */
+export const shiftBeijingDate = (iso: string, days: number) => beijingDate(beijingMidnight(iso) + days * 86400_000);
+
+/** 北京日期的星期（0 = 周日） */
+export const beijingWeekday = (iso: string) => shift(beijingMidnight(iso)).getUTCDay();

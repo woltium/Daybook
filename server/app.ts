@@ -9,6 +9,7 @@ import { clearJob, getJob, startJob } from './jobs.ts';
 import { draftSummary, NothingToSummarize, proposeTodos } from './summary.ts';
 import { AgentConfigError, agentConfig, chat, scopes, type Scope, isConfigured, resetConversation, saveAgentConfig } from './agent.ts';
 import { filesDir } from './db.ts';
+import { worldClockCities } from './worldclock.ts';
 import { approveProposal, listProposals, ProposalError, rejectProposal, type ProposalStatus } from './proposals.ts';
 import { events, manifest, NotFoundError, runAction } from './runtime.ts';
 import { callTool, tools } from './tools.ts';
@@ -136,6 +137,11 @@ export function createApp(staticDir?: string) {
     events.emit('change', { module: 'todo' });
     events.emit('change', { module: 'worklog' });
     res.json({ ok: true });
+  });
+
+  // ───────── 本机世界时钟的城市 ─────────
+  app.get('/api/worldclock', (_req, res) => {
+    res.json({ cities: worldClockCities() });
   });
 
   // ───────── 文件与前端 ─────────

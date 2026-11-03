@@ -1,24 +1,15 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { beijingDate } from '../../../core/time.ts';
-
-export const toISODate = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+import { beijingDate, beijingWeekday, shiftBeijingDate } from '../../../core/time.ts';
 
 /** 「今天」按北京时间算，不跟随系统时区 */
 export const today = () => beijingDate();
 
-export const shiftDate = (iso: string, days: number) => {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return toISODate(d);
-};
+export const shiftDate = (iso: string, days: number) => shiftBeijingDate(iso, days);
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
-export const formatDate = (iso: string) => {
-  const d = new Date(`${iso}T00:00:00`);
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 · 星期${WEEKDAYS[d.getDay()]}`;
-};
+export const formatDate = (iso: string) =>
+  `${Number(iso.slice(5, 7))} 月 ${Number(iso.slice(8, 10))} 日 · 星期${WEEKDAYS[beijingWeekday(iso)]}`;
 
 export const shortDate = (iso: string) => iso.slice(5).replace('-', '.');
 

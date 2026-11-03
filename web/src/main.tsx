@@ -1,8 +1,10 @@
 // 单窗口：左侧栏是「今天」和各模块入口，右侧显示当前页。路由用 hash：#/today、#/m/<id>、#/settings。
+// #/reminder 是待办提醒弹窗（单独的小窗口，见 electron/main.ts）。
 import { CalendarDays, Settings as SettingsIcon } from 'lucide-react';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ModuleId } from '../../modules/index.ts';
+import { ReminderPopup } from '../../modules/todo/reminder.tsx';
 import { DateProvider } from './core/date.tsx';
 import { Settings } from './Settings.tsx';
 import { AgentDock } from './agent/AgentDock.tsx';
@@ -84,6 +86,6 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {location.hash === '#/reminder' ? <ReminderPopup /> : <App />}
   </StrictMode>,
 );

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, LoaderCircle, type LucideIcon } from 'lucide
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { beijingClock, beijingDate } from '../../../core/time.ts';
 import { formatDate, shiftDate, today, useDate } from '../core/date.tsx';
+import { cityTimes, useWorldClock } from '../core/worldclock.ts';
 
 export function Button({
   variant,
@@ -298,6 +299,21 @@ export function PageFrame({ title, sub, tools, children }: { title: string; sub?
 }
 
 export const clock = (iso: string) => beijingClock(iso);
+
+/** 世界时钟：本机「世界时钟」应用里的城市，主时钟在前；limit 限制显示几个 */
+export function WorldClock({ limit }: { limit?: number }) {
+  const cities = useWorldClock();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span className="world-clock" title={cityTimes(cities, now)}>
+      {cityTimes(cities.slice(0, limit), now)}
+    </span>
+  );
+}
 
 /** 相对时间：刚刚 / 5 分钟前 / 14:20 / 10.26 */
 export function timeAgo(iso: string) {

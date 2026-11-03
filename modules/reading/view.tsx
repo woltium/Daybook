@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronDown, ChevronUp, FileText, Pencil, Lightbulb, MessageSquareText, Search, Trash2, X, type LucideIcon } from 'lucide-react';
+import { BookOpen, Check, FileText, Pencil, Lightbulb, MessageSquareText, Search, Trash2, X, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { Item } from '../../core/module.ts';
 import { call, useQuery } from '../../web/src/core/client.ts';
@@ -49,43 +49,51 @@ async function addFromText(raw: string, kind: Kind | 'auto') {
   return call('reading', 'add', { kind: resolved, title, url, tags });
 }
 
-function KindIcon({ kind }: { kind: Kind }) {
-  const { icon: Icon, label } = KINDS[kind];
+function KindLabel({ kind }: { kind: Kind }) {
   return (
-    <span className="kind-icon" style={{ background: 'var(--surface-sunk)', color: 'var(--text-2)' }} title={label}>
-      <Icon size={14} />
+    <span className="reading-kind">
+      <i />
+      {KINDS[kind].label}
     </span>
   );
 }
 
+/** 类型已由标签展示，去掉标题里重复的「知识点：」前缀 */
+const displayTitle = (t: string) => t.replace(/^(知识点|论文|推文)[：:]\s*/, '');
+
 function Title({ r }: { r: Item<Reading> }) {
-  return r.data.url ? (
-    <a className="reading-title" onClick={() => void desktop.openExternal(r.data.url)} title={r.data.url}>
-      {r.data.title}
-    </a>
-  ) : (
-    <span className="reading-title">{r.data.title}</span>
+  const title = displayTitle(r.data.title);
+  return (
+    <h3 className="reading-title">
+      {r.data.url ? (
+        <a onClick={() => void desktop.openExternal(r.data.url)} title={r.data.url}>
+          {title}
+        </a>
+      ) : (
+        title
+      )}
+    </h3>
   );
 }
 
-/** 【重点】→ 加粗 */
+/** 【重点】→ 高亮 */
 function Inline({ text }: { text: string }) {
   return (
     <>
       {text.split(/(【[^】]+】)/).map((part, i) =>
-        /^【.+】$/.test(part) ? <strong key={i}>{part.slice(1, -1)}</strong> : part,
+        /^【.+】$/.test(part) ? <mark key={i}>{part.slice(1, -1)}</mark> : part,
       )}
     </>
   );
 }
 
-/** 笔记阅读视图：• / - 开头的行成列表；行首「要点：」这类短标签加粗；长段按句号拆开 */
+/** 笔记阅读视图：• / - / 1) 开头的行成列表；行首「要点：」这类短标签加粗；长段按句号拆开 */
 function NoteBody({ text }: { text: string }) {
   const blocks: ({ list: string[] } | { para: string })[] = [];
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    const bullet = line.match(/^[•\-*·]\s*(.*)$/);
+    const bullet = line.match(/^(?:[•\-*·]|\d+[)）.、])\s*(.*)$/);
     const last = blocks[blocks.length - 1];
     if (bullet) {
       if (last && 'list' in last) last.list.push(bullet[1]);
@@ -122,58 +130,60 @@ function NoteBody({ text }: { text: string }) {
   );
 }
 
-function ReadingRow({ r }: { r: Item<Reading> }) {
-  const [open, setOpen] = useState(false);
+function ReadingCard({ r }: { r: Item<Reading> }) {
   const [editing, setEditing] = useState(false);
+  const [absOpen, setAbsOpen] = useState(false);
   const s = STATUS[r.data.status];
   const authors = r.data.authors.length ? `${r.data.authors.slice(0, 3).join(', ')}${r.data.authors.length > 3 ? ' 等' : ''}` : '';
+  const host = r.data.url && r.data.kind !== 'note' ? hostOf(r.data.url) : '';
   return (
-    <li className={`list-row list-row--top ${r.data.status === 'done' ? 'reading--done' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <KindIcon kind={r.data.kind} />
-        <div className="list-row__main">
-          <Title r={r} />
-          <div className="reading-meta">
-            {authors && <span className="muted">{authors}</span>}
-            {r.data.tags.map((t) => (
-              <Chip key={t}>#{t}</Chip>
-            ))}
-            {r.data.note && !open && <span className="muted">· 有笔记</span>}
-          </div>
-        </div>
+    <li className={`reading-card reading-card--${r.data.kind} ${r.data.status === 'done' ? 'reading-card--done' : ''}`}>
+      <div className="reading-card__head">
+        <Title r={r} />
         <Chip tone={s.tone} title="点击切换状态" onClick={() => call('reading', 'setStatus', { id: r.id, status: s.next })}>
           {s.label}
         </Chip>
-        {r.data.pdf && <Button onClick={() => void desktop.openFile(r.data.pdf!)}>PDF</Button>}
-        <IconButton icon={open ? ChevronUp : ChevronDown} label={open ? '收起' : '展开'} size="sm" ghost onClick={() => setOpen(!open)} />
       </div>
-      {open && (
-        <div className="reading-detail">
-          {r.data.abstract && <p className="reading-abstract">{r.data.abstract}</p>}
-          {editing || !r.data.note ? (
-            <AutoSaveText
-              value={r.data.note}
-              resetKey={r.id}
-              placeholder="笔记（自动保存）"
-              autoGrow
-              autoFocus={editing}
-              onSave={(note) => call('reading', 'update', { id: r.id, note })}
-            />
-          ) : (
-            <NoteBody text={r.data.note} />
-          )}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {r.data.note && (
-              <Button icon={editing ? Check : Pencil} onClick={() => setEditing(!editing)}>
-                {editing ? '完成' : '编辑'}
-              </Button>
-            )}
-            <Button icon={Trash2} onClick={() => call('reading', 'remove', { id: r.id })}>
-              删除
-            </Button>
-          </div>
-        </div>
+      <div className="reading-meta">
+        <KindLabel kind={r.data.kind} />
+        {authors && <span className="muted">· {authors}</span>}
+        {!authors && host && <span className="muted">· {host}</span>}
+        {r.data.tags.map((t) => (
+          <span key={t} className="reading-tag">
+            #{t}
+          </span>
+        ))}
+      </div>
+      {r.data.abstract && (
+        <p className={`reading-abstract ${absOpen ? '' : 'reading-abstract--clamp'}`} onClick={() => setAbsOpen(!absOpen)} title={absOpen ? '收起摘要' : '展开摘要'}>
+          {r.data.abstract}
+        </p>
       )}
+      {editing ? (
+        <AutoSaveText
+          value={r.data.note}
+          resetKey={r.id}
+          placeholder="笔记（自动保存）"
+          autoGrow
+          autoFocus
+          onSave={(note) => call('reading', 'update', { id: r.id, note })}
+        />
+      ) : (
+        r.data.note && <NoteBody text={r.data.note} />
+      )}
+      <div className="reading-card__actions">
+        {r.data.pdf && (
+          <Button variant="ghost" icon={FileText} onClick={() => void desktop.openFile(r.data.pdf!)}>
+            PDF
+          </Button>
+        )}
+        <Button variant="ghost" icon={editing ? Check : Pencil} onClick={() => setEditing(!editing)}>
+          {editing ? '完成' : r.data.note ? '编辑' : '写笔记'}
+        </Button>
+        <Button variant="ghost" icon={Trash2} onClick={() => call('reading', 'remove', { id: r.id })}>
+          删除
+        </Button>
+      </div>
     </li>
   );
 }
@@ -311,9 +321,9 @@ function Page() {
       {error && <div className="error">{error}</div>}
       {data &&
         (data.length ? (
-          <ul className="list">
+          <ul className="reading-stream">
             {data.map((r) => (
-              <ReadingRow key={r.id} r={r} />
+              <ReadingCard key={r.id} r={r} />
             ))}
           </ul>
         ) : (

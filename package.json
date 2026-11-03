@@ -1,5 +1,6 @@
 {
   "name": "daybook",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -54,6 +55,7 @@
       ],
       "category": "Office",
       "executableName": "daybook",
+      "maintainer": "Daybook <daybook@localhost>",
       "desktop": {
         "entry": {
           "Name": "Daybook"

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, write
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Notes } from '../core/module.ts';
+import { shiftBeijingDate } from '../core/time.ts';
 import { readSection, saveSection } from './config.ts';
 
 export type NotesMode = 'local' | 'obsidian';
@@ -148,10 +149,8 @@ export const notes: Notes = {
   },
 
   previous(date, maxDays = 60) {
-    const d = new Date(`${date}T00:00:00`);
-    for (let i = 0; i < maxDays; i++) {
-      d.setDate(d.getDate() - 1);
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    for (let i = 1; i <= maxDays; i++) {
+      const iso = shiftBeijingDate(date, -i);
       if (existsSync(pathFor(iso))) return iso;
     }
     return null;
